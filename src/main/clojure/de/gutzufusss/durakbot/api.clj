@@ -1,13 +1,10 @@
-(ns api
+(ns de.gutzufusss.durakbot.api
   (:require [clj-http.client :as client]
-            [clojure.data.json :as json]
             [clj-sockets.core :as sock]
             [clojure.tools.logging :as logger]
-            [clojure.string :as str])
-  (:import (java.time LocalDateTime)
-           (java.security MessageDigest)
-           (java.math BigInteger)
-           (java.util Base64)))
+            [clojure.string :as str]
+            [de.gutzufusss.durakbot.helper.crypto :as crypto]
+            [de.gutzufusss.durakbot.helper.util :as util]))
 
 (def server-list-url "http://static.rstgames.com/durak/servers.json")
 
@@ -28,47 +25,18 @@
 (def relevant-server-keys [:name :host :port])
 
 (def session-token-command "sign")
+(def accepted-token-response "confirmed")
+(def server-greeting-command "server")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
-
-;; TODO: move utility functions to separate namespace
-
-(defn current-iso8601
-  "Yeah."
-  []
-  (str (subs (.toString (LocalDateTime/now)) 0 23) "Z"))
-
-(defn md5
-  [^String s]
-  (let [algorithm (MessageDigest/getInstance "MD5")
-        raw (.digest algorithm (.getBytes s))]
-    (format "%032x" (BigInteger. 1 raw))))
-
-(defn base64
-  [^String s encode]
-  (if encode
-    (.encodeToString (Base64/getEncoder) (.getBytes s))
-    (String. (.decode (Base64/getDecoder) s))))
 
 (defn key->weird-hash-thing
   "Takes a key and performs the necessary magic. If this ever stop working, check if
   the salt is still the same."
   [key]
   (let [salted-key (str key key-hash-salt)]
-    (base64 (md5 salted-key)
-            true)))
-
-(defn json->clj
-  "Takes a json string, converts it to Clojure data and keywordizes the keys of any
-  maps from the data."
-  [json-string]
-  (json/read-str json-string
-                 :key-fn keyword))
-
-(defn clj->json
-  "Takes Clojure data and converts it to a json string."
-  [data]
-  (json/write-str data))
+    (crypto/base64 (crypto/md5 salted-key)
+                   true)))
 
 (defn marshal
   "Serializes data (everything is loosely based on some whack reverse engineering)."
@@ -76,7 +44,7 @@
   (let [command (:command data)
         data (dissoc data :command)]
     ;(.getBytes "some string" "UTF-8") <--- TODO: test thoroughly if we need that
-    (str/replace (str command (clj->json data) "\n")
+    (str/replace (str command (util/clj->json data) "\n")
                  "{}"
                  "")))
 
@@ -86,8 +54,7 @@
   (let [first-brace (str/index-of data "{")
         command (str/trim (subs data 0 first-brace))
         data (str/trim (subs data first-brace (count data)))]
-    (assoc (json->clj data) :command command)))
-
+    (assoc (util/json->clj data) :command command)))
 
 (defn fetch-server-list
   "Fetches server list using HTTP and returns it as vector."
@@ -97,7 +64,7 @@
   (let [headers {user-agent-key user-agent-value}
         clean-map-fn #(for [server (vals %)] (select-keys server relevant-server-keys))
         eng-name-fn #(map (fn [srv-map] (assoc srv-map :name (:en (:name srv-map)))) %)]
-    (-> (:user (json->clj
+    (-> (:user (util/json->clj
                  (:body (client/get server-list-url
                                     {:headers headers}))))
         (dissoc diamond-server)
@@ -119,7 +86,7 @@
   {:post [(do (logger/info "received session token:" (:key %))
               (and (= (:command %) session-token-command)
                    (not (str/blank? (:key %)))))]}
-  (let [client-info (assoc client-info :t (current-iso8601))]
+  (let [client-info (assoc client-info :t (util/current-iso8601))]
     (do (sock/write-to socket (marshal client-info))
         (unmarshal (sock/read-line socket)))))
 
@@ -128,10 +95,12 @@
   and then proceed to base64 encode the whole mess. Returns a boolean value w.r.t.
   the outcome of the verification process."
   [socket key]
-  {:post [(do (logger/info "successfully verified the session key.")
-              %)]}
+  {:post [(do (logger/infof "successfully verified session. server id is \"%s\", server time is %s."
+                           (:id %) (:time %))
+              (= server-greeting-command (:command %)))]}
   (let [hash (key->weird-hash-thing key)
         payload-map {:hash hash
                      :command session-token-command}]
     (do (sock/write-to socket (marshal payload-map))
-        (= "confirmed" (sock/read-line socket)))))
+        (and (= accepted-token-response (sock/read-line socket))
+             (unmarshal (sock/read-line socket))))))

@@ -1,5 +1,5 @@
-(ns bot
-  (:require [api]))
+(ns de.gutzufusss.durakbot.bot
+  (:require [de.gutzufusss.durakbot.api :as api]))
 
 (def servers (api/fetch-server-list))
 
