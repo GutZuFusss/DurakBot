@@ -25,7 +25,7 @@
 (def relevant-server-keys [:name :host :port])
 
 (def session-token-command "sign")
-(def accepted-token-response "confirmed")
+(def accepted-token-response "confirmed") ;; this one is just plain text, no json
 (def server-greeting-command "server")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
