@@ -3,7 +3,8 @@
             [clojure.data.json :as json]
             [clj-sockets.core :as sock]
             [clojure.tools.logging :as logger]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import (java.time LocalDateTime)))
 
 (def server-list-url "http://static.rstgames.com/durak/servers.json")
 
@@ -23,10 +24,12 @@
 (def diamond-server :u0)
 (def relevant-server-keys [:name :host :port])
 
+(def session-token-command "sign")
+
 (defn current-iso8601
   "Yeah."
   []
-  (str (subs (.toString (java.time.LocalDateTime/now)) 0 23) "Z"))
+  (str (subs (.toString (LocalDateTime/now)) 0 23) "Z"))
 
 (defn json->clj
   "Takes a json string, converts it to Clojure data and keywordizes the keys of any
@@ -49,6 +52,15 @@
     (str/replace (str command (clj->json data) "\n")
                  "{}"
                  "")))
+
+(defn unmarshal
+  "De-serializes data."
+  [data]
+  (let [first-brace (str/index-of data "{")
+        command (str/trim (subs data 0 first-brace))
+        data (str/trim (subs data first-brace (count data)))]
+    (assoc (json->clj data) :command command)))
+
 
 (defn fetch-server-list
   "Fetches server list using HTTP and returns it as vector."
@@ -77,8 +89,9 @@
   "Sends some mocked client data via the socket provided and waits for the
   server to reply with a session key, which then is returned."
   [socket]
-  {:post [(do (logger/info "received session token: " %)
-              (some? %))]}
+  {:post [(do (logger/info "received session token:" (:key %))
+              (and (= (:command %) session-token-command)
+                   (not (str/blank? (:key %)))))]}
   (let [client-info (assoc client-info :t (current-iso8601))]
     (do (sock/write-to socket (marshal client-info))
-        (sock/read-line socket))))
+        (unmarshal (sock/read-line socket)))))
