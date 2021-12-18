@@ -4,7 +4,10 @@
             [clj-sockets.core :as sock]
             [clojure.tools.logging :as logger]
             [clojure.string :as str])
-  (:import (java.time LocalDateTime)))
+  (:import (java.time LocalDateTime)
+           (java.security MessageDigest)
+           (java.math BigInteger)
+           (java.util Base64)))
 
 (def server-list-url "http://static.rstgames.com/durak/servers.json")
 
@@ -26,10 +29,34 @@
 
 (def session-token-command "sign")
 
+(def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
+
+;; TODO: move utility functions to separate namespace
+
 (defn current-iso8601
   "Yeah."
   []
   (str (subs (.toString (LocalDateTime/now)) 0 23) "Z"))
+
+(defn md5
+  [^String s]
+  (let [algorithm (MessageDigest/getInstance "MD5")
+        raw (.digest algorithm (.getBytes s))]
+    (format "%032x" (BigInteger. 1 raw))))
+
+(defn base64
+  [^String s encode]
+  (if encode
+    (.encodeToString (Base64/getEncoder) (.getBytes s))
+    (String. (.decode (Base64/getDecoder) s))))
+
+(defn key->weird-hash-thing
+  "Takes a key and performs the necessary magic. If this ever stop working, check if
+  the salt is still the same."
+  [key]
+  (let [salted-key (str key key-hash-salt)]
+    (base64 (md5 salted-key)
+            true)))
 
 (defn json->clj
   "Takes a json string, converts it to Clojure data and keywordizes the keys of any
@@ -95,3 +122,16 @@
   (let [client-info (assoc client-info :t (current-iso8601))]
     (do (sock/write-to socket (marshal client-info))
         (unmarshal (sock/read-line socket)))))
+
+(defn verify-session-key
+  "This is the crucial part of the handshake. We put some salt on our key, MD5 hash it
+  and then proceed to base64 encode the whole mess. Returns a boolean value w.r.t.
+  the outcome of the verification process."
+  [socket key]
+  {:post [(do (logger/info "successfully verified the session key.")
+              %)]}
+  (let [hash (key->weird-hash-thing key)
+        payload-map {:hash hash
+                     :command session-token-command}]
+    (do (sock/write-to socket (marshal payload-map))
+        (= "confirmed" (sock/read-line socket)))))
