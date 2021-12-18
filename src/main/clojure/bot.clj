@@ -6,7 +6,8 @@
 (defn do-smth-lawl
   []
   (let [server (rand-nth servers)]
-    (api/connect (:name server) (:host server) (:port server))))
+    (-> (api/connect (:name server) (:host server) (:port server))
+        (api/request-session-key))))
 
 (defn -main
   []
