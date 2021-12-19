@@ -172,10 +172,10 @@
 
 (defn create-game
   "Creates a lobby others can join. Does not return shi"
-  [socket & {:keys [:sw :bet :deck :password
-                    :players :fast :ch :nb]
-             :or {:sw false, :bet 500, :deck 36, :password nil,
-                  :players 4, :fast false, :ch false, :nb false}}]
+  [socket & {:keys [sw bet deck password
+                    players fast ch nb]
+             :or {sw false, bet 500, deck 36, password nil,
+                  players 4, fast false, ch false, nb false}}]
   (let [create-game-map {:sw sw
                          :bet bet
                          :deck deck
