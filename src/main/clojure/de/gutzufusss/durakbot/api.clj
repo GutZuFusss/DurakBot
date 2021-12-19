@@ -160,7 +160,7 @@
 (defn authenticate
   "Use your authentication token to log in. Returns the response."
   [socket token]
-  {:post [(do (logger/infof "authentication successfull. token is \"%s\"." %)
+  {:post [(do (logger/infof "authentication successfull. id is \"%s\"." (:id %))
               (not= error-command (:command %)))]}
   (let [auth-map {:token token
                   :command authenticate-command}]
@@ -168,9 +168,16 @@
         (last
           (repeat 3
                   (let [response (unmarshal (sock/read-line socket))]
-                    (if (nil? response))
                     (do (logger/debug "response to authentication:" response)
                         response)))))))
+
+(defn send-gb
+  "Not to sure what this is for... Since it's TCP an ack seems unlikely."
+  [socket]
+  (do (sock/write-to socket (marshal {:command "gb"}))
+      (repeat 50
+              (do (Thread/sleep 50)
+                  (logger/debug "send-gb read-line:" (sock/read-line socket))))))
 
 (defn create-game
   "Creates a lobby others can join. Does not return shi"

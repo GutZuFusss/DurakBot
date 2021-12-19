@@ -12,7 +12,8 @@
           session-key (:key session-key-response)]
       (do (api/verify-session-key socket session-key)
           #_(api/register-account socket "Olagf")
-          (api/authenticate socket "djsidjasidjoasjdoasijdoa")
+          (api/authenticate socket (System/getenv "DURAK_HEHE"))
+          (api/send-gb socket)
           #_(api/create-game socket {:bet 100})))))
 
 (defn -main
