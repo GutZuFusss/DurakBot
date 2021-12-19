@@ -189,4 +189,4 @@
         (repeat 2
                 (logger/debug "response to game creation:"
                               (unmarshal (sock/read-line socket))))
-        (logger/info "game was hopefully created idk"))))
+        (logger/info "game was hopefully created idk the api design seems kinda odd"))))
