@@ -11,7 +11,8 @@
           session-key-response (api/request-session-key socket)
           session-key (:key session-key-response)]
       (do (api/verify-session-key socket session-key)
-          #_(api/register-account socket "Olagf")))))
+          #_(api/register-account socket "Olagf")
+          (api/authenticate socket "djsidjasidjoasjdoasijdoa")))))
 
 (defn -main
   []

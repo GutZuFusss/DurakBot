@@ -30,6 +30,8 @@
 (def init-registration-command "get_captcha")
 (def finalize-registration-command "register")
 (def set-token-command "set_token")
+(def authenticate-command "auth")
+(def error-command "err")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
 
@@ -153,3 +155,16 @@
               (do (logger/info "no captcha url received, proceeding with registration...")
                   (finalize-registration socket username nil))
               (finalize-registration socket username (prompt-captcha-answer captcha-url))))))))
+
+(defn authenticate
+  "Use your authentication token to log in. Returns the response."
+  [socket token]
+  {:post [(do (logger/infof "authentication successfull. token is \"%s\"." %)
+              (not= error-command (:command %)))]}
+  (let [auth-map {:token token
+                  :command authenticate-command}]
+    (do (sock/write-to socket (marshal auth-map))
+        (repeat 3
+                (let [response (unmarshal (sock/read-line socket))]
+                  (do (logger/debug "response to authentication: " response)
+                      response))))))
