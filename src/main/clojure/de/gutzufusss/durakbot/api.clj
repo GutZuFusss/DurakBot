@@ -24,8 +24,9 @@
 (def diamond-server :u0)
 (def relevant-server-keys [:name :host :port])
 
-(def session-token-command "sign")
 (def accepted-token-response "confirmed") ;; this one is just plain text, no json
+
+(def session-token-command "sign")
 (def server-greeting-command "server")
 (def init-registration-command "get_captcha")
 (def finalize-registration-command "register")
@@ -33,6 +34,7 @@
 (def authenticate-command "auth")
 (def error-command "err")
 (def create-game-command "create")
+(def lookup-start-command "lookup_start")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
 
@@ -199,3 +201,20 @@
                 (logger/debug "response to game creation:"
                               (unmarshal (sock/read-line socket))))
         (logger/info "game was hopefully created idk the api design seems kinda odd"))))
+
+(defn lookup-matches
+  "Returns a list of active matches that can then be joined."
+  [socket & {:keys [betMin pr betMax fast
+                    sw nb ch players
+                    deck dr]
+             :or {betMin 100, pr [false], betMax 1000, fast [true],
+                  sw [true], nb [false], ch [false true], players [4],
+                  deck [36], dr [false true]}}]
+  (let [lookup-map {:betMin betMin, :pr pr, :betMax betMax, :fast fast, :sw sw, :nb nb,
+                    :ch ch, :players players, :deck deck, :dr dr, :status "open",
+                    :command lookup-start-command}]
+    (do (sock/write-to socket (marshal lookup-map))
+        (while (atom (unmarshal (sock/read-line socket)))
+          (let [response (unmarshal (sock/read-line socket))]
+            (do (logger/debug "response to" lookup-start-command ":" response)
+                response))))))

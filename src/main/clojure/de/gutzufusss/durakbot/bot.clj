@@ -14,6 +14,7 @@
           #_(api/register-account socket "Olagf")
           (api/authenticate socket (System/getenv "DURAK_HEHE"))
           (api/send-gb socket)
+          (api/lookup-matches socket)
           #_(api/create-game socket {:bet 100})))))
 
 (defn -main
