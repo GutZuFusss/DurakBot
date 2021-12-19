@@ -32,6 +32,7 @@
 (def set-token-command "set_token")
 (def authenticate-command "auth")
 (def error-command "err")
+(def create-game-command "create")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
 
@@ -166,5 +167,26 @@
     (do (sock/write-to socket (marshal auth-map))
         (repeat 3
                 (let [response (unmarshal (sock/read-line socket))]
-                  (do (logger/debug "response to authentication: " response)
+                  (do (logger/debug "response to authentication:" response)
                       response))))))
+
+(defn create-game
+  "Creates a lobby others can join. Does not return shi"
+  [socket & {:keys [:sw :bet :deck :password
+                    :players :fast :ch :nb]
+             :or {:sw false, :bet 500, :deck 36, :password nil,
+                  :players 4, :fast false, :ch false, :nb false}}]
+  (let [create-game-map {:sw sw
+                         :bet bet
+                         :deck deck
+                         :password password
+                         :players players
+                         :fast fast
+                         :ch ch
+                         :nb nb
+                         :command create-game-command}]
+    (do (sock/write-to socket (marshal create-game-map))
+        (repeat 2
+                (logger/debug "response to game creation:"
+                              (unmarshal (sock/read-line socket))))
+        (logger/info "game was hopefully created idk"))))
