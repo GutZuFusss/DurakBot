@@ -165,10 +165,12 @@
   (let [auth-map {:token token
                   :command authenticate-command}]
     (do (sock/write-to socket (marshal auth-map))
-        (repeat 3
-                (let [response (unmarshal (sock/read-line socket))]
-                  (do (logger/debug "response to authentication:" response)
-                      response))))))
+        (last
+          (repeat 3
+                  (let [response (unmarshal (sock/read-line socket))]
+                    (if (nil? response))
+                    (do (logger/debug "response to authentication:" response)
+                        response)))))))
 
 (defn create-game
   "Creates a lobby others can join. Does not return shi"
