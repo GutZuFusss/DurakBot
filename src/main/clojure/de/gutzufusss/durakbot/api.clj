@@ -27,6 +27,9 @@
 (def session-token-command "sign")
 (def accepted-token-response "confirmed") ;; this one is just plain text, no json
 (def server-greeting-command "server")
+(def init-registration-command "get_captcha")
+(def finalize-registration-command "register")
+(def set-token-command "set_token")
 
 (def key-hash-salt "oc3q7ingf978mx457fgk4587fg847") ;; obtained by reversing the ios app
 
@@ -41,20 +44,24 @@
 (defn marshal
   "Serializes data (everything is loosely based on some whack reverse engineering)."
   [data]
-  (let [command (:command data)
-        data (dissoc data :command)]
-    ;(.getBytes "some string" "UTF-8") <--- TODO: test thoroughly if we need that
-    (str/replace (str command (util/clj->json data) "\n")
-                 "{}"
-                 "")))
+  (if (nil? data)
+      nil
+      (let [command (:command data)
+            data (dissoc data :command)]
+        ;(.getBytes "some string" "UTF-8") <--- TODO: test thoroughly if we need that
+        (str/replace (str command (util/clj->json data) "\n")
+                     "{}"
+                     ""))))
 
 (defn unmarshal
   "De-serializes data."
   [data]
-  (let [first-brace (str/index-of data "{")
-        command (str/trim (subs data 0 first-brace))
-        data (str/trim (subs data first-brace (count data)))]
-    (assoc (util/json->clj data) :command command)))
+  (if (or (nil? data) (str/blank? data))
+    nil
+    (let [first-brace (str/index-of data "{")
+          command (str/trim (subs data 0 first-brace))
+          data (str/trim (subs data first-brace (count data)))]
+      (assoc (util/json->clj data) :command command))))
 
 (defn fetch-server-list
   "Fetches server list using HTTP and returns it as vector."
@@ -81,7 +88,8 @@
 
 (defn request-session-key
   "Sends some mocked client data via the socket provided and waits for the
-  server to reply with a session key, which then is returned."
+  server to reply with a session key, which then is returned in a map and can
+  be retrieved with the :key keyword."
   [socket]
   {:post [(do (logger/info "received session token:" (:key %))
               (and (= (:command %) session-token-command)
@@ -104,3 +112,44 @@
     (do (sock/write-to socket (marshal payload-map))
         (and (= accepted-token-response (sock/read-line socket))
              (unmarshal (sock/read-line socket))))))
+
+(defn prompt-captcha-answer
+  "NOT_IMPLEMENTED"
+  [captcha-url]
+  (logger/warn "NOT_IMPLEMENTED"))
+
+(defn finalize-registration
+  "Send the captcha result (or nil if we did not get a captcha) along with the username.
+  Will return the token needed for logging in."
+  [socket username captcha]
+  {:post [(do (logger/infof "account created successfully. token is \"%s\"." %)
+              %)]}
+  (let [register-map {:name username
+                      :captcha captcha
+                      :command finalize-registration-command}]
+    (do (sock/write-to socket (marshal register-map))
+        (logger/debug (sock/read-line socket))
+        (when captcha
+          (let [data (sock/read-line socket)
+                _ (logger/debug data)
+                data (unmarshal data)]
+            (when (= set-token-command (:command data))
+              (:token data)))))))
+
+
+(defn register-account
+  "Quality of life function to create account from Clojure. Captcha has to be entered
+  manually. Will return false if something went wrong (Incorrect captcha in most cases)."
+  [socket username]
+  (let [request-captcha-map {:command init-registration-command}]
+    (do (sock/write-to socket (marshal request-captcha-map))
+        (let [response1 (unmarshal (sock/read-line socket))
+              response2 (unmarshal (sock/read-line socket))
+              captcha-url (or (:url response1) (:url response2))]
+          (do
+            (logger/debug init-registration-command "response1" response1)
+            (logger/debug init-registration-command "response2" response2)
+            (if (nil? captcha-url)
+              (do (logger/info "no captcha url received, proceeding with registration...")
+                  (finalize-registration socket username nil))
+              (finalize-registration socket username (prompt-captcha-answer captcha-url))))))))
