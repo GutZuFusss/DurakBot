@@ -79,6 +79,19 @@
       {:token token
        :msg-type :auth}))
 
+(defn lookup-start-request
+  "Supplied filters are used to forge a request that will make the server send
+  you matching games."
+  [& {:keys [betMin pr betMax fast
+             sw nb ch players
+             deck dr]
+      :or {betMin 100, pr [false], betMax 1000, fast [true],
+           sw [true], nb [false], ch [false true], players [4],
+           deck [36], dr [false true]}}]
+  {:betMin betMin, :pr pr, :betMax betMax, :fast fast, :sw sw, :nb nb,
+   :ch ch, :players players, :deck deck, :dr dr, :status "open",
+   :msg-type :lookup_start})
+
 (defn handle-server-info
   "This might eventually be one of the functions where we will have state. For now
   we just log."
@@ -101,6 +114,16 @@
 
         ;default
         nil)))
+
+(defn join-game-request
+  "Returns the corresponding request data if game matches criteria, nil else."
+  [game]
+  (do (log/infof "checking if game eligible: %s" (str game))
+      (if (not= 100 (:bet game))
+        nil
+        {:id (:id game)
+         :msg-type :join})))
+
 
 (defn compute-reply
   "Callback function that is invoked when a message by the server has been received."
@@ -130,7 +153,27 @@
     (log/debugf "msg-type free: %s" (str message))
 
     :tour
-    (log/debugf "msg-type tour: %s" (str message))
+    (do (log/debugf "msg-type tour: %s" (str message))
+        (lookup-start-request)) ;; maybe :tour isn't always broadcast idk
+
+    :bets
+    (log/debugf "msg-type bets: %s" (str message))
+
+    :gl
+    (loop [games (:g message)]
+      (let [game-candidate (join-game-request (last games))]
+        (if (and (nil? game-candidate) (not-empty games))
+          (recur (butlast games))
+          game-candidate)))
+
+    :g
+    (join-game-request (dissoc message :msg-type))
+
+    :gd ;; i think this might be "game" deleted
+    (log/tracef "msg-type gd: %s" (str message))
+
+    :game
+    (log/info "received game info:" (str message))
 
     ;default
     (log/warnf "unknown msg-type \"%s\"!\nfull message: %s" (:msg-type message)
@@ -172,7 +215,7 @@
             (do (log/debugf "replying to message: \"%s\" -> \"%s\"" message reply)
                 (when reply
                   (s/put! client reply))
-                (Thread/sleep 20) ;; be nice :)
+                (Thread/sleep 2) ;; be nice :)
                 (recur)))))))
 
 (defn -main
